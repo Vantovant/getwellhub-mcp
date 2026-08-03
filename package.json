@@ -1,0 +1,19 @@
+{
+  "name": "getwellhub-mcp",
+  "version": "1.0.0",
+  "description": "Standalone MCP server connecting Claude directly to the Get Well Hub Supabase database (no Lovable tokens used).",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
