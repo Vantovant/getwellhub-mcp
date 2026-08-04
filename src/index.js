@@ -66,7 +66,7 @@ const APPROVED_GROUPS = [
 function buildServer() {
   const server = new McpServer({
     name: "getwellhub-mcp",
-    version: "2.0.0",
+    version: "2.1.0",
   });
 
   server.registerTool(
@@ -175,6 +175,98 @@ function buildServer() {
         touch_number,
         message_body,
       });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ---------------------------------------------------------------------
+  // Contact management tools (added for daily operational use)
+  // ---------------------------------------------------------------------
+
+  server.registerTool(
+    "list_contacts",
+    {
+      title: "List contacts",
+      description:
+        "Read contacts, optionally filtered by lead_type, temperature, tag, or " +
+        "free-text search on name/phone. Returns up to 100 contacts.",
+      inputSchema: {
+        lead_type: z.enum(["prospect", "registered", "buyer", "vip"]).optional()
+          .describe("Filter by lead type"),
+        temperature: z.enum(["hot", "warm", "cold"]).optional()
+          .describe("Filter by temperature"),
+        tag: z.string().optional().describe("Filter by a single tag"),
+        search: z.string().optional().describe("Free-text search on name or phone number"),
+        limit: z.number().int().positive().max(100).optional()
+          .describe("Max results to return, default 25, max 100"),
+      },
+    },
+    async ({ lead_type, temperature, tag, search, limit }) => {
+      const data = await callBridge("list_contacts", { lead_type, temperature, tag, search, limit });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "get_contact",
+    {
+      title: "Get a single contact",
+      description:
+        "Get full detail for one contact by id or phone number, including their " +
+        "last 10 activity log entries.",
+      inputSchema: {
+        contact_id: z.string().optional().describe("UUID of the contact"),
+        phone_normalized: z.string().optional().describe("Normalized phone number, e.g. +27831234567"),
+      },
+    },
+    async ({ contact_id, phone_normalized }) => {
+      const data = await callBridge("get_contact", { contact_id, phone_normalized });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "update_contact",
+    {
+      title: "Update a contact",
+      description:
+        "Edit specific fields on a contact (name, email, lead_type, temperature, tags, " +
+        "do_not_contact). Only the fields you provide are changed — everything else " +
+        "is left untouched.",
+      inputSchema: {
+        contact_id: z.string().describe("UUID of the contact to update"),
+        name: z.string().optional().describe("New name"),
+        email: z.string().optional().describe("New email address"),
+        lead_type: z.enum(["prospect", "registered", "buyer", "vip"]).optional()
+          .describe("New lead type"),
+        temperature: z.enum(["hot", "warm", "cold"]).optional().describe("New temperature"),
+        tags: z.array(z.string()).optional().describe("Replaces the full tags list"),
+        do_not_contact: z.boolean().optional().describe("Set do-not-contact flag"),
+      },
+    },
+    async ({ contact_id, name, email, lead_type, temperature, tags, do_not_contact }) => {
+      const data = await callBridge("update_contact", {
+        contact_id, name, email, lead_type, temperature, tags, do_not_contact,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "add_contact_note",
+    {
+      title: "Add a note to a contact",
+      description:
+        "Append a timestamped note to a contact's notes field. This is strictly " +
+        "additive — it never overwrites or removes existing notes — and also logs " +
+        "a note_added activity entry.",
+      inputSchema: {
+        contact_id: z.string().describe("UUID of the contact"),
+        note: z.string().describe("The note text to append"),
+      },
+    },
+    async ({ contact_id, note }) => {
+      const data = await callBridge("add_contact_note", { contact_id, note });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
