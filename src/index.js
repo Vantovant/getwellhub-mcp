@@ -190,7 +190,10 @@ app.use(express.json());
 
 app.post("/mcp", async (req, res) => {
   const auth = req.headers["authorization"];
-  if (auth !== `Bearer ${MCP_API_KEY}`) {
+  const queryKey = req.query.key;
+  const authorized =
+    auth === `Bearer ${MCP_API_KEY}` || queryKey === MCP_API_KEY;
+  if (!authorized) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
