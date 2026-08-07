@@ -66,7 +66,7 @@ const APPROVED_GROUPS = [
 function buildServer() {
   const server = new McpServer({
     name: "getwellhub-mcp",
-    version: "2.1.0",
+    version: "2.2.0",
   });
 
   server.registerTool(
@@ -81,6 +81,24 @@ function buildServer() {
     },
     async () => {
       const data = await callBridge("get_maytapi_status");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "get_dispatch_policy",
+    {
+      title: "Get WhatsApp group dispatch policy",
+      description:
+        "Read the live WhatsApp group dispatch guardrails: cron interval, " +
+        "inter-send flood limits, hourly/daily caps, freeze state, the list " +
+        "of approved groups, standing scheduling rules, and recent incident " +
+        "history. Use this before queuing group posts, especially anything " +
+        "time-sensitive.",
+      inputSchema: {},
+    },
+    async () => {
+      const data = await callBridge("get_dispatch_policy");
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -180,7 +198,7 @@ function buildServer() {
   );
 
   // ---------------------------------------------------------------------
-  // Contact management tools (added for daily operational use)
+  // Contact management tools
   // ---------------------------------------------------------------------
 
   server.registerTool(
@@ -267,6 +285,86 @@ function buildServer() {
     },
     async ({ contact_id, note }) => {
       const data = await callBridge("add_contact_note", { contact_id, note });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ---------------------------------------------------------------------
+  // Plan (tasks / reminders / meetings) + Voice Diary tools
+  // ---------------------------------------------------------------------
+
+  server.registerTool(
+    "create_task",
+    {
+      title: "Create a PLAN task",
+      description:
+        "Add a task to the PLAN module. Appears immediately in the app's task list.",
+      inputSchema: {
+        title: z.string().describe("Task title"),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional()
+          .describe("Priority, defaults to medium"),
+        due_date: z.string().optional().describe("Optional ISO 8601 due date/time"),
+      },
+    },
+    async ({ title, priority, due_date }) => {
+      const data = await callBridge("create_task", { title, priority, due_date });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "create_reminder",
+    {
+      title: "Create a PLAN reminder",
+      description: "Add a timed reminder to the PLAN module.",
+      inputSchema: {
+        title: z.string().describe("Reminder title"),
+        reminder_time: z.string().describe("ISO 8601 timestamp for when to be reminded"),
+        description: z.string().optional().describe("Optional extra detail"),
+      },
+    },
+    async ({ title, reminder_time, description }) => {
+      const data = await callBridge("create_reminder", { title, reminder_time, description });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "create_meeting",
+    {
+      title: "Create a PLAN meeting (lightweight)",
+      description:
+        "Add a meeting to the PLAN module only. This does NOT create a Google " +
+        "Calendar event and does NOT send a WhatsApp or email invite to anyone — " +
+        "it is purely a local entry in your own plan.",
+      inputSchema: {
+        title: z.string().describe("Meeting title"),
+        start_time: z.string().describe("ISO 8601 start timestamp"),
+        location: z.string().optional().describe("Optional location or meeting link"),
+        description: z.string().optional().describe("Optional extra detail"),
+      },
+    },
+    async ({ title, start_time, location, description }) => {
+      const data = await callBridge("create_meeting", { title, start_time, location, description });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "create_diary_entry",
+    {
+      title: "Add a Voice Diary entry",
+      description:
+        "Add a private journal entry to Voice Diary. This is private, per-user " +
+        "content — only use this when explicitly asked to record something in " +
+        "the diary.",
+      inputSchema: {
+        content: z.string().describe("The entry text"),
+        title: z.string().optional().describe("Optional title for the entry"),
+      },
+    },
+    async ({ content, title }) => {
+      const data = await callBridge("create_diary_entry", { content, title });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
