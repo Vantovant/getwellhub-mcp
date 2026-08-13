@@ -2,6 +2,16 @@
 // Connects Claude to the Get Well Hub app via a locked-down Supabase Edge
 // Function ("mcp-bridge") instead of a direct database connection.
 // Runs independently of Lovable — no Lovable credits/tokens are used.
+//
+// THIS UPDATE adds 8 tools so PLAN items can be queried, ticked off, and
+// cleaned up, not just created:
+//   list_tasks, complete_task, delete_task,
+//   list_reminders, complete_reminder, delete_reminder,
+//   list_meetings, delete_meeting
+// Note: no complete_meeting — plan_meetings has no confirmed is_done column
+// in this app's schema, unlike plan_tasks/plan_reminders.
+// delete_task/delete_reminder/delete_meeting are HARD deletes (no
+// deleted_at column on any of these three tables) — there is no undo.
 
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -66,7 +76,7 @@ const APPROVED_GROUPS = [
 function buildServer() {
   const server = new McpServer({
     name: "getwellhub-mcp",
-    version: "2.2.0",
+    version: "2.3.0",
   });
 
   server.registerTool(
@@ -313,6 +323,55 @@ function buildServer() {
   );
 
   server.registerTool(
+    "list_tasks",
+    {
+      title: "List PLAN tasks",
+      description:
+        "Read PLAN tasks, optionally filtered by status ('pending'/'in_progress'/'done') " +
+        "and/or a single calendar day (matches due_date). Read-only.",
+      inputSchema: {
+        status: z.string().optional().describe("Filter by status, e.g. 'pending'"),
+        date: z.string().optional().describe("YYYY-MM-DD — filters to tasks due on this day"),
+        limit: z.number().int().positive().max(100).optional(),
+      },
+    },
+    async ({ status, date, limit }) => {
+      const data = await callBridge("list_tasks", { status, date, limit });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "complete_task",
+    {
+      title: "Mark a PLAN task done",
+      description:
+        "Mark a PLAN task as done (sets status to 'done' and stamps completed_at). " +
+        "Use list_tasks first to find the task id.",
+      inputSchema: { id: z.string().describe("plan_tasks.id — required") },
+    },
+    async ({ id }) => {
+      const data = await callBridge("complete_task", { id });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "delete_task",
+    {
+      title: "Delete a PLAN task",
+      description:
+        "Permanently delete a PLAN task. This is a hard delete — there is no undo. " +
+        "Use list_tasks first to find the task id.",
+      inputSchema: { id: z.string().describe("plan_tasks.id — required") },
+    },
+    async ({ id }) => {
+      const data = await callBridge("delete_task", { id });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
     "create_reminder",
     {
       title: "Create a PLAN reminder",
@@ -325,6 +384,55 @@ function buildServer() {
     },
     async ({ title, reminder_time, description }) => {
       const data = await callBridge("create_reminder", { title, reminder_time, description });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "list_reminders",
+    {
+      title: "List PLAN reminders",
+      description:
+        "Read PLAN reminders, optionally filtered by is_done and/or a single calendar " +
+        "day (matches reminder_time). Read-only.",
+      inputSchema: {
+        is_done: z.boolean().optional(),
+        date: z.string().optional().describe("YYYY-MM-DD — filters to reminders on this day"),
+        limit: z.number().int().positive().max(100).optional(),
+      },
+    },
+    async ({ is_done, date, limit }) => {
+      const data = await callBridge("list_reminders", { is_done, date, limit });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "complete_reminder",
+    {
+      title: "Mark a PLAN reminder done",
+      description:
+        "Mark a PLAN reminder as done (sets is_done to true). Use list_reminders " +
+        "first to find the reminder id.",
+      inputSchema: { id: z.string().describe("plan_reminders.id — required") },
+    },
+    async ({ id }) => {
+      const data = await callBridge("complete_reminder", { id });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "delete_reminder",
+    {
+      title: "Delete a PLAN reminder",
+      description:
+        "Permanently delete a PLAN reminder. This is a hard delete — there is no undo. " +
+        "Use list_reminders first to find the reminder id.",
+      inputSchema: { id: z.string().describe("plan_reminders.id — required") },
+    },
+    async ({ id }) => {
+      const data = await callBridge("delete_reminder", { id });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -346,6 +454,40 @@ function buildServer() {
     },
     async ({ title, start_time, location, description }) => {
       const data = await callBridge("create_meeting", { title, start_time, location, description });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "list_meetings",
+    {
+      title: "List PLAN meetings",
+      description:
+        "Read PLAN meetings, optionally filtered by a single calendar day (matches " +
+        "start_time). Read-only. Note: there is no completion/done tool for meetings " +
+        "in this app — only tasks and reminders support marking done.",
+      inputSchema: {
+        date: z.string().optional().describe("YYYY-MM-DD — filters to meetings on this day"),
+        limit: z.number().int().positive().max(100).optional(),
+      },
+    },
+    async ({ date, limit }) => {
+      const data = await callBridge("list_meetings", { date, limit });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "delete_meeting",
+    {
+      title: "Delete a PLAN meeting",
+      description:
+        "Permanently delete a PLAN meeting. This is a hard delete — there is no undo. " +
+        "Use list_meetings first to find the meeting id.",
+      inputSchema: { id: z.string().describe("plan_meetings.id — required") },
+    },
+    async ({ id }) => {
+      const data = await callBridge("delete_meeting", { id });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
